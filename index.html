@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Medical Terms Drag & Drop</title>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        margin: 40px;
+        background: #f5f5f5;
+    }
+    h2 { margin-bottom: 5px; }
+
+    #question-counter {
+        font-weight: bold;
+        margin-bottom: 15px;
+    }
+
+    .container {
+        display: flex;
+        gap: 40px;
+        margin-top: 20px;
+    }
+    .terms, .definitions {
+        width: 45%;
+    }
+    .term, .definition {
+        background: white;
+        padding: 10px;
+        margin-bottom: 10px;
+        border: 2px solid #ccc;
+        border-radius: 5px;
+        cursor: grab;
+    }
+    .definition {
+        font-weight: bold;
+    }
+    .drop-target {
+        border: 2px dashed #888;
+        padding: 10px;
+        min-height: 50px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+        background: #fff;
+    }
+
+    .feedback {
+        font-size: 14px;
+        margin-bottom: 15px;
+    }
+
+    .correct { background: #c8f7c5 !important; }
+    .incorrect { background: #f7c5c5 !important; }
+
+    button {
+        padding: 10px 20px;
+        margin: 20px 10px 0 0;
+        font-size: 16px;
+        cursor: pointer;
+    }
+
+    button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+</style>
+</head>
+
+<body>
+
+<h2 id="question-title"></h2>
+<p id="question-counter"></p>
+
+<div class="container">
+    <div class="terms" id="terms"></div>
+    <div class="definitions" id="definitions"></div>
+</div>
+
+<button id="prevBtn" onclick="prevQuestion()">Previous</button>
+<button id="nextBtn" onclick="nextQuestion()">Next</button>
+<button onclick="checkAnswers()">Check Answers</button>
+
+<script>
+const questions = [
+    {
+        title: "Medical Terms – Question 1",
+        terms: ["Hypertension", "Bradycardia", "Dyspnea"],
+        definitions: {
+            "Hypertension": "High blood pressure",
+            "Bradycardia": "Abnormally slow heart rate",
+            "Dyspnea": "Difficulty breathing"
+        }
+    },
+    {
+        title: "Medical Terms – Question 2",
+        terms: ["Edema", "Tachycardia", "Hematuria"],
+        definitions: {
+            "Edema": "Swelling caused by fluid retention",
+            "Tachycardia": "Abnormally fast heart rate",
+            "Hematuria": "Blood in the urine"
+        }
+    },
+    {
+        title: "Medical Terms – Question 3",
+        terms: ["Malaria", "Titanus", "Bilharzia"],
+        definitions: {
+            "Malaria": "Fever",
+            "Titanus": "Cut and infection",
+            "Bilharzia": "Blood in the urine"
+        }
+    }
+];
+
+let currentQuestion = 0;
+let draggedItem = null;
+
+/* 🔊 Speak multiple items in sequence (FIX) */
+function speakSequence(textArray) {
+    if (!("speechSynthesis" in window) || textArray.length === 0) return;
+
+    speechSynthesis.cancel();
+    let index = 0;
+
+    function speakNext() {
+        if (index >= textArray.length) return;
+
+        const utterance = new SpeechSynthesisUtterance(textArray[index]);
+        utterance.rate = 0.9;
+        utterance.onend = speakNext;
+        index++;
+        speechSynthesis.speak(utterance);
+    }
+
+    speakNext();
+}
+
+function loadQuestion() {
+    const q = questions[currentQuestion];
+
+    document.getElementById("question-title").textContent = q.title;
+    document.getElementById("question-counter").textContent =
+        `Question ${currentQuestion + 1} of ${questions.length}`;
+
+    document.getElementById("prevBtn").disabled = currentQuestion === 0;
+    document.getElementById("nextBtn").disabled = currentQuestion === questions.length - 1;
+
+    const termsDiv = document.getElementById("terms");
+    const defsDiv = document.getElementById("definitions");
+
+    termsDiv.innerHTML = "";
+    defsDiv.innerHTML = "";
+
+    const shuffledTerms = [...q.terms].sort(() => Math.random() - 0.5);
+    const shuffledDefinitions = Object.entries(q.definitions)
+        .sort(() => Math.random() - 0.5);
+
+    shuffledTerms.forEach(term => {
+        const div = document.createElement("div");
+        div.className = "term";
+        div.textContent = term;
+        div.draggable = true;
+        div.addEventListener("dragstart", () => draggedItem = term);
+        termsDiv.appendChild(div);
+    });
+
+    shuffledDefinitions.forEach(([term, def]) => {
+        const label = document.createElement("div");
+        label.className = "definition";
+        label.textContent = def;
+
+        const dropZone = document.createElement("div");
+        dropZone.className = "drop-target";
+        dropZone.dataset.definition = def;
+
+        const feedback = document.createElement("div");
+        feedback.className = "feedback";
+
+        dropZone.addEventListener("dragover", e => e.preventDefault());
+        dropZone.addEventListener("drop", function () {
+            this.textContent = draggedItem;
+            this.dataset.term = draggedItem;
+            feedback.textContent = "";
+            this.classList.remove("correct", "incorrect");
+        });
+
+        defsDiv.appendChild(label);
+        defsDiv.appendChild(dropZone);
+        defsDiv.appendChild(feedback);
+    });
+}
+
+function checkAnswers() {
+    const q = questions[currentQuestion];
+    const dropZones = document.querySelectorAll(".drop-target");
+    const wordsToSpeak = [];
+
+    dropZones.forEach(zone => {
+        const feedback = zone.nextElementSibling;
+        const chosenTerm = zone.dataset.term;
+        const correctDef = zone.dataset.definition;
+
+        const correctTerm = Object.keys(q.definitions)
+            .find(key => q.definitions[key] === correctDef);
+
+        if (!chosenTerm) {
+            feedback.textContent = "⚠ Please drag an answer here.";
+            return;
+        }
+
+        if (chosenTerm === correctTerm) {
+            zone.classList.add("correct");
+            zone.classList.remove("incorrect");
+            feedback.textContent = `✔ Correct! ${chosenTerm}`;
+            wordsToSpeak.push(`Correct. ${chosenTerm}`);
+        } else {
+            zone.classList.add("incorrect");
+            zone.classList.remove("correct");
+            feedback.textContent = `✘ Incorrect. Correct answer: ${correctTerm}`;
+        }
+    });
+
+    speakSequence(wordsToSpeak);
+}
+
+function nextQuestion() {
+    if (currentQuestion < questions.length - 1) {
+        currentQuestion++;
+        loadQuestion();
+    }
+}
+
+function prevQuestion() {
+    if (currentQuestion > 0) {
+        currentQuestion--;
+        loadQuestion();
+    }
+}
+
+loadQuestion();
+</script>
+
+</body>
+</html>
