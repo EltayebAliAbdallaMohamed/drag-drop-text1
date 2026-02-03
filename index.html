@@ -2,14 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Medical Terms Drag & Drop</title>
+<title>Medical Terms – Tap to Match</title>
 
 <style>
     body {
         font-family: Arial, sans-serif;
-        margin: 40px;
+        margin: 20px;
         background: #f5f5f5;
     }
+
     h2 { margin-bottom: 5px; }
 
     #question-counter {
@@ -19,30 +20,42 @@
 
     .container {
         display: flex;
-        gap: 40px;
+        flex-direction: column;
+        gap: 20px;
         margin-top: 20px;
     }
+
     .terms, .definitions {
-        width: 45%;
+        width: 100%;
     }
+
     .term, .definition {
         background: white;
-        padding: 10px;
+        padding: 12px;
         margin-bottom: 10px;
         border: 2px solid #ccc;
         border-radius: 5px;
-        cursor: grab;
+        cursor: pointer;
     }
+
+    .term.selected {
+        border-color: #007bff;
+        background: #e6f0ff;
+        font-weight: bold;
+    }
+
     .definition {
         font-weight: bold;
     }
+
     .drop-target {
         border: 2px dashed #888;
-        padding: 10px;
-        min-height: 50px;
-        margin-bottom: 10px;
+        padding: 12px;
+        min-height: 45px;
+        margin-bottom: 5px;
         border-radius: 5px;
         background: #fff;
+        cursor: pointer;
     }
 
     .feedback {
@@ -63,6 +76,17 @@
     button:disabled {
         opacity: 0.5;
         cursor: not-allowed;
+    }
+
+    @media (min-width: 600px) {
+        .container {
+            flex-direction: row;
+            gap: 40px;
+        }
+
+        .terms, .definitions {
+            width: 45%;
+        }
     }
 </style>
 </head>
@@ -113,22 +137,26 @@ const questions = [
 ];
 
 let currentQuestion = 0;
-let draggedItem = null;
+let selectedTerm = null;
 
-/* 🔊 Speak multiple items in sequence (FIX) */
-function speakSequence(textArray) {
-    if (!("speechSynthesis" in window) || textArray.length === 0) return;
+/* 🔊 Speak sequence of words ONLY (no “correct”) */
+function speakSequence(words) {
+    if (!("speechSynthesis" in window) || words.length === 0) return;
 
     speechSynthesis.cancel();
     let index = 0;
 
     function speakNext() {
-        if (index >= textArray.length) return;
+        if (index >= words.length) return;
 
-        const utterance = new SpeechSynthesisUtterance(textArray[index]);
+        const utterance = new SpeechSynthesisUtterance(words[index]);
         utterance.rate = 0.9;
-        utterance.onend = speakNext;
-        index++;
+
+        utterance.onend = () => {
+            index++;
+            speakNext();
+        };
+
         speechSynthesis.speak(utterance);
     }
 
@@ -150,6 +178,7 @@ function loadQuestion() {
 
     termsDiv.innerHTML = "";
     defsDiv.innerHTML = "";
+    selectedTerm = null;
 
     const shuffledTerms = [...q.terms].sort(() => Math.random() - 0.5);
     const shuffledDefinitions = Object.entries(q.definitions)
@@ -159,8 +188,13 @@ function loadQuestion() {
         const div = document.createElement("div");
         div.className = "term";
         div.textContent = term;
-        div.draggable = true;
-        div.addEventListener("dragstart", () => draggedItem = term);
+
+        div.addEventListener("click", () => {
+            document.querySelectorAll(".term").forEach(t => t.classList.remove("selected"));
+            div.classList.add("selected");
+            selectedTerm = term;
+        });
+
         termsDiv.appendChild(div);
     });
 
@@ -176,12 +210,12 @@ function loadQuestion() {
         const feedback = document.createElement("div");
         feedback.className = "feedback";
 
-        dropZone.addEventListener("dragover", e => e.preventDefault());
-        dropZone.addEventListener("drop", function () {
-            this.textContent = draggedItem;
-            this.dataset.term = draggedItem;
+        dropZone.addEventListener("click", () => {
+            if (!selectedTerm) return;
+            dropZone.textContent = selectedTerm;
+            dropZone.dataset.term = selectedTerm;
             feedback.textContent = "";
-            this.classList.remove("correct", "incorrect");
+            dropZone.classList.remove("correct", "incorrect");
         });
 
         defsDiv.appendChild(label);
@@ -204,15 +238,15 @@ function checkAnswers() {
             .find(key => q.definitions[key] === correctDef);
 
         if (!chosenTerm) {
-            feedback.textContent = "⚠ Please drag an answer here.";
+            feedback.textContent = "⚠ Please select an answer.";
             return;
         }
 
         if (chosenTerm === correctTerm) {
             zone.classList.add("correct");
             zone.classList.remove("incorrect");
-            feedback.textContent = `✔ Correct! ${chosenTerm}`;
-            wordsToSpeak.push(`Correct. ${chosenTerm}`);
+            feedback.textContent = "✔ Correct";
+            wordsToSpeak.push(correctTerm); // 🔊 speak term ONLY
         } else {
             zone.classList.add("incorrect");
             zone.classList.remove("correct");
